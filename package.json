@@ -17,10 +17,12 @@
   },
   "homepage": "https://github.com/saRvaGnyA/tezos-1inch-resolver#readme",
   "dependencies": {
+    "@noble/hashes": "^1.8.0",
     "@taquito/signer": "^22.0.0",
     "@taquito/taquito": "^22.0.0",
     "cors": "^2.8.5",
     "dotenv": "^17.2.1",
+    "ethers": "^6.15.0",
     "express": "^5.1.0",
     "mongoose": "^8.17.0",
     "node-fetch": "^3.3.2",

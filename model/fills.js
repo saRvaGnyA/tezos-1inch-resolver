@@ -2,7 +2,7 @@ const mongoose = require('mongoose');
 
 const FillsSchema = new mongoose.Schema({
     hash: String,
-    status: { type: String, enum: ['OPEN', 'PLACED', 'VALID', 'INVALID', 'COMPLETED', 'REFUNDED'], required: true },
+    status: { type: String, enum: ['OPEN', 'ACTIVE', 'PLACED', 'VALID', 'INVALID', 'COMPLETED', 'REFUNDED'], required: true },
     secret: String, // CAUTION: Don't expose this in APIs!
     srcEscrowDeployContractHash: String,
     dstEscrowDeployContractHash: String,
@@ -10,6 +10,8 @@ const FillsSchema = new mongoose.Schema({
     takerSourceChainAddress: String,
     takerDestChainAddress: String,
     safetyDeposit: String,
+    makingQty: Number,
+    takingQty: Number,
     createdAt: { type: Date, default: Date.now },
     updatedAt: { type: Date, default: Date.now }
 });

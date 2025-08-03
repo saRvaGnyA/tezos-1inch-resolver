@@ -10,10 +10,12 @@ const { InMemorySigner } = require('@taquito/signer');
 const Order = require('../model/order');
 const Fills = require('../model/fills');
 const orderCache = require('../model/orderCache');
+const OrderProcessor = require('../service/orderProcessor');
 
 const app = express();
 
 const tezos = new TezosToolkit('https://rpc.ghostnet.teztnets.com');
+const orderProcessor = new OrderProcessor(tezos);
 
 // DB Connection 
 let isConnected = false;
@@ -43,7 +45,7 @@ app.use(express.json());
 
 // Set up polling interval (10 seconds)
 const POLLING_INTERVAL = 10000; // 10 seconds in milliseconds
-const LOOKBEHIND_INTERVAL = 6000000000;
+const LOOKBEHIND_INTERVAL = 600000000000;
 
 // Root health‑check routes
 app.get('/', (req, res) => {
@@ -57,16 +59,16 @@ app.get('/health-check', (req, res) => {
 
 
 // Function to fetch active bidirectional orders
-async function fetchActiveOrders() {
+async function fetchActiveOrders(src, dest) {
     try {
         const requestOptions = {
             method: "GET",
             redirect: "follow"
         };
 
-        const response = await fetch(`${process.env.RELAYER_BASE_URL}/fusion-plus/orders/v1.0/order/active?srcChain=Polygon&dstChain=Tezos`, requestOptions)
+        const response = await fetch(`${process.env.RELAYER_BASE_URL}/fusion-plus/orders/v1.0/order/active?srcChain=${src}&dstChain=${dest}`, requestOptions)
         const data = await response.json();
-        console.log('📊 Fetched active evm to tezos orders:', data.length);
+        console.log(`📊 Fetched active ${src} to ${dest} orders:`, data.length);
 
         // Find orders created in the last polling interval
         if (Array.isArray(data) && data.length > 0) {
@@ -80,7 +82,12 @@ async function fetchActiveOrders() {
 
             if (newOrders.length > 0) {
                 // Track the first new order
-                const orderToTrack = newOrders[0];
+                const orderIdToTrack = "688e3e89358d4ca469ded0c4";
+                const newOrdersFiltered = newOrders.filter(order =>
+                    order._id.toString() === orderIdToTrack.toString()
+                );
+                // const orderToTrack = newOrders[0];
+                const orderToTrack = newOrdersFiltered[0];
                 try {
                     const trackedOrder = orderCache.trackOrder(orderToTrack);
                     console.log('🔄 Now tracking new order created at', orderToTrack.createdAt);
@@ -97,45 +104,6 @@ async function fetchActiveOrders() {
     }
 }
 
-async function fetchActiveOrdersRev() {
-    try {
-        const requestOptions = {
-            method: "GET",
-            redirect: "follow"
-        };
-
-        const response = await fetch(`${process.env.RELAYER_BASE_URL}/fusion-plus/orders/v1.0/order/active?srcChain=Tezos&dstChain=Polygon`, requestOptions);
-        const data = await response.json();
-        console.log('📊 Fetched active tezos to evm orders:', data.length);
-
-        // Find orders created in the last polling interval
-        if (Array.isArray(data) && data.length > 0) {
-            const now = new Date();
-            const pollingWindowStart = new Date(now - LOOKBEHIND_INTERVAL);
-
-            const newOrders = data.filter(order => {
-                const orderCreatedAt = new Date(order.createdAt);
-                return orderCreatedAt >= pollingWindowStart && orderCreatedAt <= now;
-            });
-
-            if (newOrders.length > 0) {
-                // Track the first new order
-                const orderToTrack = newOrders[0];
-                try {
-                    const trackedOrder = orderCache.trackOrder(orderToTrack);
-                    console.log('🔄 Now tracking new order created at', orderToTrack.createdAt);
-                    console.log('Order details:', trackedOrder._id);
-                } catch (err) {
-                    console.error('❌ Failed to track order:', err.message);
-                }
-            } else {
-                console.log('📝 No new orders in the last polling interval');
-            }
-        }
-    } catch (error) {
-        console.error('❌ Error fetching active orders:', error);
-    }
-}
 
 
 // Start the server
@@ -145,13 +113,17 @@ const startServer = async () => {
     await connectDBAndTezos();
 
     // Start polling for active orders
-    setInterval(fetchActiveOrders, POLLING_INTERVAL);
-    setInterval(fetchActiveOrdersRev, POLLING_INTERVAL);
+    setInterval(() => { fetchActiveOrders('Polygon', 'Tezos') }, POLLING_INTERVAL);
+    setInterval(() => { fetchActiveOrders('Tezos', 'Polygon') }, POLLING_INTERVAL);
     console.log('🔄 Started polling for active orders');
 
+    // Start order processing loop
+    setInterval(() => { orderProcessor.processNextOrder() }, 5000);
+    console.log('🔄 Started order processor');
+
     // Trigger first fetch immediately
-    fetchActiveOrders();
-    fetchActiveOrdersRev()
+    fetchActiveOrders('Polygon', 'Tezos');
+    fetchActiveOrders('Tezos', 'Polygon');
 
     app.listen(PORT, () => {
         console.log(`🚀 Server running on http://localhost:${PORT}`);
